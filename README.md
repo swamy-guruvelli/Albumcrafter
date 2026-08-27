@@ -18,12 +18,6 @@ The studio keeps the page rail, editable canvas, and tools visible together. Gra
 
 ![Albumcrafter studio editor](output/playwright/studio.png)
 
-### Preview
-
-Preview fits the page to the viewport by default, supports zoom controls, and animates page turns in opposite directions for next and previous navigation.
-
-![Albumcrafter animated preview](output/playwright/preview.png)
-
 ## What is included
 
 - Landing page with the supplied `Albumcrafter.mp4` hero video and a softened loop transition.
