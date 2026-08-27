@@ -1,4 +1,5 @@
 type Env = { OPENROUTER_API_KEY?: string; OPENROUTER_MODEL?: string }
+
 const approvedPhotos = [
   { id: 'coast-road', src: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1200&q=85', alt: 'A sunlit road through a green landscape' },
   { id: 'friends-sea', src: 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=800&q=85', alt: 'Friends walking near the sea' },
@@ -23,7 +24,8 @@ function validLayout(value: unknown) {
   })
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function generateLayout(request: Request, env: Env) {
+  if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405)
   if (!env.OPENROUTER_API_KEY) return json({ error: 'OpenRouter is not configured yet.' }, 503)
   try {
     const input = await request.json() as { prompt?: string; title?: string; pageCount?: number; style?: string }

@@ -2,7 +2,7 @@
 
 Albumcrafter is a local-first photo album studio for turning photographs, a feeling, and a little editorial direction into an editable keepsake. It is designed around considered layouts, print-friendly exports, and a small amount of AI assistance without handing control of the book to the model.
 
-> Prototype status: the editor, OpenRouter route, ChatGPT handoff, local project save, PNG/PDF export, and Cloudflare Pages packaging are implemented. Persistent accounts, remote project storage, payments, and production print fulfillment are not included yet.
+> Prototype status: the editor, OpenRouter route, ChatGPT handoff, local project save, PNG/PDF export, and Cloudflare Workers packaging are implemented. Persistent accounts, remote project storage, payments, and production print fulfillment are not included yet.
 
 ## Product tour
 
@@ -34,7 +34,7 @@ Preview fits the page to the viewport by default, supports zoom controls, and an
 - Project JSON export containing pages and saved photo assets.
 - Current-page PNG export and whole-album PDF export.
 - Fit-first animated preview with zoom in/out controls.
-- Ask the studio flow backed by an OpenRouter Cloudflare Pages Function.
+- Ask the studio flow backed by an OpenRouter Cloudflare Worker route.
 - ChatGPT handoff that copies a structured prompt, opens a configurable chat URL, and imports pasted JSON.
 - Curated photo catalog shared by the handoff and OpenRouter flows.
 - Strict photo URL validation, friendly error toasts, and verified asset persistence.
@@ -50,12 +50,12 @@ flowchart LR
     Studio --> BrowserSave[(localStorage)]
     Studio --> Exporters[PNG / PDF / JSON exporters]
     Studio --> Handoff[ChatGPT handoff]
-    Studio --> PagesFunction[Cloudflare Pages Function]
-    PagesFunction --> OpenRouter[OpenRouter API]
-    OpenRouter --> PagesFunction
-    PagesFunction --> Studio
+    Studio --> Worker[Cloudflare Worker]
+    Worker --> OpenRouter[OpenRouter API]
+    OpenRouter --> Worker
+    Worker --> Studio
     Catalog[Approved photo catalog] --> Handoff
-    Catalog --> PagesFunction
+    Catalog --> Worker
 ```
 
 ### AI handoff and asset validation
@@ -115,8 +115,8 @@ classDiagram
 | Sanitization | DOMPurify |
 | Raster export | html-to-image |
 | PDF export | jsPDF |
-| AI gateway | Cloudflare Pages Function + OpenRouter |
-| Hosting target | Cloudflare Pages |
+| AI gateway | Cloudflare Worker + OpenRouter |
+| Hosting target | Cloudflare Workers Static Assets |
 | Persistence | Browser localStorage for the prototype |
 
 ## Requirements
@@ -150,8 +150,8 @@ The ChatGPT handoff works without an API key. It copies the prompt to the clipbo
 
 | Variable | Used by | Required | Purpose |
 | --- | --- | --- | --- |
-| `OPENROUTER_API_KEY` | Cloudflare Function | Ask the studio only | Server-side OpenRouter credential. Never expose it as a `VITE_` variable. |
-| `OPENROUTER_MODEL` | Cloudflare Function | No | OpenRouter model; defaults to `google/gemini-2.5-flash`. |
+| `OPENROUTER_API_KEY` | Cloudflare Worker | Ask the studio only | Server-side OpenRouter credential. Never expose it as a `VITE_` variable. |
+| `OPENROUTER_MODEL` | Cloudflare Worker | No | OpenRouter model; defaults to `google/gemini-2.5-flash`. |
 | `VITE_LLM_HANDOFF_URL` | Browser | No | Base URL for the external chat handoff; defaults to `https://chatgpt.com/?q=`. |
 | `VITE_LLM_HANDOFF_NAME` | Browser | No | Display name for the handoff provider; defaults to `ChatGPT`. |
 
@@ -211,24 +211,23 @@ Saving is intentionally explicit:
 
 Uploaded photographs are stored as data URLs in the local project. This is useful for a prototype, but a real product should move binary storage to object storage before supporting large albums.
 
-## Cloudflare Pages deployment
+## Cloudflare Workers deployment
 
-The project is configured for Pages in `wrangler.toml` with `dist` as the build output and `functions/` as the Pages Functions directory.
+The project is configured as a Worker in `wrangler.toml`. The Worker serves the Vite output from `dist` and handles `/api/generate-layout` before forwarding all other requests to static assets.
 
 ```bash
 npx wrangler login
 npm run build
-npx wrangler pages project create albumcrafter
-npx wrangler pages secret put OPENROUTER_API_KEY --project-name albumcrafter
+npx wrangler secret put OPENROUTER_API_KEY
 npm run deploy
 ```
 
-If the Pages project already exists, skip `pages project create`. Set `OPENROUTER_MODEL` in the Cloudflare Pages environment if you want to override the checked-in default. Keep `OPENROUTER_API_KEY` as a Pages secret.
+If the Worker already exists, skip any project creation step. Set `OPENROUTER_MODEL` in the Worker environment if you want to override the checked-in default. Keep `OPENROUTER_API_KEY` as a Worker secret.
 
-For a local Pages-shaped runtime:
+For a local Worker-shaped runtime:
 
 ```bash
-npm run pages:dev
+npm run worker:dev
 ```
 
 ## Verification commands
@@ -236,7 +235,7 @@ npm run pages:dev
 ```bash
 npm run build
 npm audit --omit=dev
-npx wrangler pages functions build functions --outdir .wrangler/functions-build
+npx wrangler deploy --dry-run
 ```
 
 The browser smoke checks used for the current prototype cover:
@@ -254,8 +253,6 @@ The browser smoke checks used for the current prototype cover:
 ```text
 .
 ├── Albumcrafter.mp4             # supplied landing video
-├── functions/api/
-│   └── generate-layout.ts       # OpenRouter Pages Function
 ├── public/
 │   ├── _headers                  # security and CSP headers
 │   ├── albumcrafter-mark.png     # generated brand mark
@@ -263,9 +260,11 @@ The browser smoke checks used for the current prototype cover:
 ├── output/playwright/            # README screenshots and captured artifacts
 ├── src/
 │   ├── App.tsx                   # routes, studio, handoff, export, preview
+│   ├── api/generate-layout.ts    # OpenRouter Worker handler
 │   ├── content.ts                # starter album pages
 │   ├── icons.tsx                 # inline icon set
 │   ├── photo-library.ts          # approved photo catalog
+│   └── worker.ts                 # Worker router and static asset fallback
 │   ├── styles.css                # landing and studio styling
 │   └── types.ts                  # project and AI response types
 ├── index.html
@@ -276,7 +275,7 @@ The browser smoke checks used for the current prototype cover:
 ## Security and production notes
 
 - AI-generated HTML is sanitized with DOMPurify before rendering or exporting.
-- The OpenRouter credential is read only inside the Cloudflare Function.
+- The OpenRouter credential is read only inside the Cloudflare Worker.
 - CSP and browser security headers are defined in `public/_headers`.
 - External photo URLs are allowlisted before they become album assets.
 - User uploads remain in the browser in this prototype; they are not uploaded to OpenRouter.

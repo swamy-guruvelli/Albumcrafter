@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "pages:dev": "npm run build && wrangler pages dev dist",
-    "deploy": "npm run build && wrangler pages deploy dist"
+    "worker:dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "dompurify": "^3.4.14",
